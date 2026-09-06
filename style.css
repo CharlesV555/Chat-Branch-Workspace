@@ -1,0 +1,100 @@
+#cbw-root { --bg:#f7f7f4; --panel:#f0f1ed; --ink:#20221f; --muted:#747870; --line:#dfe1dc; --green:#237a55; --green-soft:#e0eee7; position:fixed; inset:0; z-index:2147483647; color:var(--ink); background:transparent; pointer-events:none; font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; color-scheme:light; }
+#cbw-root * { box-sizing:border-box; }
+#cbw-root .cbw-app { height:100%; min-height:0; display:grid; grid-template-columns:280px minmax(0,1fr); background:var(--bg); pointer-events:auto; overflow:hidden; }
+#cbw-root .cbw-app.cbw-app-hidden { display:none; }
+#cbw-root button,#cbw-root textarea { font:inherit; }
+#cbw-root button { color:inherit; }
+#cbw-root .cbw-sidebar { min-width:0; padding:22px 16px 18px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; }
+#cbw-root .cbw-sidebar-head { display:flex; gap:11px; align-items:center; padding:0 6px 24px; }
+#cbw-root .cbw-sidebar-head div { display:flex; flex-direction:column; line-height:1.2; }
+#cbw-root .cbw-sidebar-head strong { font-size:15px; letter-spacing:-.01em; }
+#cbw-root .cbw-sidebar-head span { margin-top:4px; font-size:10px; text-transform:uppercase; letter-spacing:.13em; color:var(--muted); }
+#cbw-root .cbw-exit { width:30px; height:30px; border:1px solid var(--line); background:#fff; border-radius:8px; cursor:pointer; }
+#cbw-root .cbw-exit:hover { border-color:#b9bdb6; }
+#cbw-root .cbw-new { width:100%; border:0; border-radius:9px; padding:10px 12px; background:var(--green); color:#fff; font-weight:650; text-align:left; cursor:pointer; box-shadow:0 1px 2px #153e2b2b; }
+#cbw-root .cbw-new:hover { background:#1b6848; }
+#cbw-root .cbw-tree { margin-top:18px; overflow:auto; flex:1; }
+#cbw-root .cbw-record-library { flex:0 1 34%; min-height:96px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; }
+#cbw-root .cbw-record-heading { padding:0 7px 8px; display:flex; align-items:center; justify-content:space-between; color:#737a73; font-size:10px; font-weight:750; letter-spacing:.1em; }
+#cbw-root .cbw-record-heading em { min-width:20px; padding:2px 6px; border-radius:999px; background:#dfe4de; text-align:center; font-style:normal; letter-spacing:0; }
+#cbw-root .cbw-records { overflow:auto; min-height:0; }
+#cbw-root .cbw-record { display:grid; grid-template-columns:minmax(0,1fr) 28px; align-items:center; margin:2px 0; border-radius:8px; }
+#cbw-root .cbw-record:hover,#cbw-root .cbw-record.active { background:#e3e7e1; }
+#cbw-root .cbw-record-view { min-width:0; padding:7px 8px; border:0; background:transparent; display:flex; flex-direction:column; align-items:flex-start; cursor:pointer; text-align:left; }
+#cbw-root .cbw-record-view strong { width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:650; }
+#cbw-root .cbw-record-view span { margin-top:3px; color:#858b84; font-size:10px; }
+#cbw-root .cbw-record-open { width:24px; height:24px; padding:0; border:0; border-radius:5px; background:transparent; color:#697168; cursor:pointer; opacity:.65; }
+#cbw-root .cbw-record-open:hover { color:var(--green); background:#fff; opacity:1; }
+#cbw-root .cbw-record-empty { padding:8px; color:#959a94; font-size:11px; }
+#cbw-root .cbw-branch { width:100%; min-height:38px; border:0; background:transparent; display:flex; align-items:center; gap:8px; padding:7px 8px 7px calc(8px + var(--depth)*13px); border-radius:8px; cursor:pointer; text-align:left; white-space:nowrap; }
+#cbw-root .cbw-branch:hover { background:#e6e8e3; }
+#cbw-root .cbw-branch.active { background:#fff; box-shadow:0 1px 4px #1f2b2312; font-weight:650; }
+#cbw-root .cbw-lines { width:22px; color:#a0a59e; font-family:ui-monospace,monospace; font-size:12px; }
+#cbw-root .cbw-branch i { width:9px; height:9px; flex:0 0 auto; border-radius:50%; background:#aeb3ac; border:2px solid var(--panel); box-shadow:0 0 0 1px #aeb3ac; }
+#cbw-root .cbw-branch.active i { background:var(--green); box-shadow:0 0 0 1px var(--green); }
+#cbw-root .cbw-branch > span:last-child { overflow:hidden; text-overflow:ellipsis; }
+#cbw-root .cbw-node-row { display:grid; grid-template-columns:minmax(0,1fr) 26px; align-items:center; margin-left:calc(13px + var(--depth)*13px); border-radius:7px; }
+#cbw-root .cbw-node-row:hover,#cbw-root .cbw-node-row.active { background:#e3e7e1; }
+#cbw-root .cbw-node { min-width:0; height:32px; padding:4px 2px; border:0; background:transparent; display:flex; align-items:center; gap:7px; text-align:left; cursor:pointer; }
+#cbw-root .cbw-node-path { width:22px; flex:0 0 auto; color:#a0a59e; font:11px ui-monospace,monospace; }
+#cbw-root .cbw-node i { width:7px; height:7px; flex:0 0 auto; border-radius:50%; background:#8a9189; }
+#cbw-root .cbw-node-row.active .cbw-node i { background:var(--green); box-shadow:0 0 0 3px #cce0d4; }
+#cbw-root .cbw-node-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:#555b55; }
+#cbw-root .cbw-node em { margin-left:auto; font-size:10px; color:#7e897f; font-style:normal; }
+#cbw-root .cbw-node-rename { width:24px; height:24px; padding:0; border:0; border-radius:5px; background:transparent; color:#80867f; opacity:0; cursor:pointer; }
+#cbw-root .cbw-node-row:hover .cbw-node-rename,#cbw-root .cbw-node-row.active .cbw-node-rename,#cbw-root .cbw-node-rename:focus-visible { opacity:1; }
+#cbw-root .cbw-node-rename:hover { background:#fff; color:var(--green); }
+#cbw-root .cbw-local-note { font-size:11px; color:var(--muted); padding:13px 7px 0; border-top:1px solid var(--line); display:flex; align-items:center; gap:7px; }
+#cbw-root .cbw-local-note span { width:7px; height:7px; border-radius:50%; background:#5fa77f; }
+#cbw-root .cbw-main { min-width:0; min-height:0; height:100%; display:grid; grid-template-rows:auto minmax(0,1fr) auto; overflow:hidden; }
+#cbw-root .cbw-topbar { height:88px; padding:18px clamp(24px,5vw,72px); display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); background:#fafaf8db; backdrop-filter:blur(12px); }
+#cbw-root .cbw-kicker { font-size:10px; letter-spacing:.15em; font-weight:700; color:var(--green); }
+#cbw-root .cbw-title { margin:4px 0 0; font-size:22px; line-height:1.15; letter-spacing:-.03em; }
+#cbw-root .cbw-rename { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 12px; font-size:12px; cursor:pointer; }
+#cbw-root .cbw-rename:hover { border-color:#b9bdb6; }
+#cbw-root .cbw-top-actions { display:flex; gap:8px; }
+#cbw-root .cbw-return-page { border:1px solid #bfd4c7; background:var(--green-soft); color:#215f43; border-radius:8px; padding:8px 12px; font-size:12px; cursor:pointer; }
+#cbw-root .cbw-return-page:hover { background:#d4e8dc; }
+#cbw-root .cbw-messages { min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; touch-action:pan-y; padding:34px clamp(24px,7vw,120px) 48px; scroll-behavior:smooth; scrollbar-gutter:stable; }
+#cbw-root .cbw-message { width:min(780px,100%); margin:0 auto 32px; }
+#cbw-root .cbw-user { padding-left:min(12%,80px); }
+#cbw-root .cbw-message-meta { margin-bottom:8px; font-size:10px; font-weight:750; letter-spacing:.14em; color:var(--muted); }
+#cbw-root .cbw-turn-title { margin:0 0 8px; font-size:13px; line-height:1.35; color:#315f49; font-weight:750; letter-spacing:-.01em; }
+#cbw-root .cbw-user .cbw-message-meta { color:var(--green); }
+#cbw-root .cbw-user .cbw-markdown { background:var(--green-soft); border:1px solid #cadfd3; border-radius:14px 14px 3px 14px; padding:14px 18px; }
+#cbw-root .cbw-markdown { font-size:15px; line-height:1.7; overflow-wrap:anywhere; }
+#cbw-root .cbw-markdown > :first-child { margin-top:0; }
+#cbw-root .cbw-markdown > :last-child { margin-bottom:0; }
+#cbw-root .cbw-markdown h1,#cbw-root .cbw-markdown h2,#cbw-root .cbw-markdown h3 { line-height:1.25; letter-spacing:-.025em; margin:1.35em 0 .55em; }
+#cbw-root .cbw-markdown h1 { font-size:24px; } #cbw-root .cbw-markdown h2 { font-size:19px; } #cbw-root .cbw-markdown h3 { font-size:16px; }
+#cbw-root .cbw-markdown p,#cbw-root .cbw-markdown ul,#cbw-root .cbw-markdown ol,#cbw-root .cbw-markdown blockquote { margin:.7em 0; }
+#cbw-root .cbw-markdown a { color:#176c4a; text-decoration-thickness:1px; text-underline-offset:3px; }
+#cbw-root .cbw-markdown blockquote { margin-left:0; padding-left:14px; border-left:3px solid #9abca9; color:#5e665f; }
+#cbw-root .cbw-markdown code { font-family:"SFMono-Regular",Consolas,monospace; font-size:.9em; background:#e9ebe7; border-radius:5px; padding:.15em .35em; }
+#cbw-root .cbw-markdown pre { overflow:auto; padding:16px; background:#242824; color:#edf0eb; border-radius:10px; line-height:1.55; }
+#cbw-root .cbw-markdown pre code { background:transparent; padding:0; color:inherit; }
+#cbw-root .cbw-markdown table { width:100%; border-collapse:collapse; margin:1em 0; }
+#cbw-root .cbw-markdown th,#cbw-root .cbw-markdown td { border:1px solid var(--line); padding:8px 10px; text-align:left; }
+#cbw-root .cbw-empty { height:100%; display:grid; place-content:center; text-align:center; color:var(--muted); gap:7px; }
+#cbw-root .cbw-empty strong { color:var(--ink); }
+#cbw-root .cbw-response-waiting { width:min(780px,100%); margin:-20px auto 32px; padding:12px 15px; border-left:2px solid #a9b8ad; color:#788078; font-size:12px; animation:cbw-pulse 1.5s ease-in-out infinite; }
+@keyframes cbw-pulse { 50% { opacity:.55; } }
+#cbw-root .cbw-composer { width:min(820px,calc(100% - 48px)); margin:0 auto 24px; position:relative; padding:12px 105px 28px 15px; background:#fff; border:1px solid #d6d9d3; border-radius:14px; box-shadow:0 9px 30px #27332a14; }
+#cbw-root .cbw-composer:focus-within { border-color:#8ab29c; box-shadow:0 0 0 3px #cce2d5a3,0 9px 30px #27332a14; }
+#cbw-root .cbw-composer textarea { display:block; width:100%; min-height:28px; max-height:180px; resize:none; border:0; outline:0; color:var(--ink); background:transparent; line-height:1.55; }
+#cbw-root .cbw-composer textarea::placeholder { color:#9a9e97; }
+#cbw-root .cbw-composer textarea:disabled { cursor:not-allowed; color:#858b84; }
+#cbw-root .cbw-composer button { position:absolute; right:12px; top:11px; border:0; border-radius:8px; padding:8px 12px; color:#fff; background:var(--green); font-weight:650; cursor:pointer; }
+#cbw-root .cbw-composer button span { opacity:.7; margin-left:3px; }
+#cbw-root .cbw-composer button:disabled { opacity:.55; cursor:wait; }
+#cbw-root .cbw-composer p { position:absolute; bottom:8px; left:15px; margin:0; font-size:10px; color:#969b94; }
+#cbw-root .cbw-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+#cbw-root .cbw-fab { position:fixed; right:22px; bottom:22px; z-index:2; height:48px; min-width:48px; padding:0 16px 0 13px; border:1px solid #176440; border-radius:999px; display:flex; align-items:center; gap:8px; color:#fff; background:#237a55; box-shadow:0 8px 26px #102a1d42; cursor:pointer; pointer-events:auto; font-weight:700; font-size:12px; transition:transform .16s ease,background .16s ease,box-shadow .16s ease; }
+#cbw-root .cbw-fab:hover { transform:translateY(-2px); background:#1b6848; box-shadow:0 11px 30px #102a1d52; }
+#cbw-root .cbw-fab:focus-visible { outline:3px solid #a8d2ba; outline-offset:3px; }
+#cbw-root .cbw-fab-icon { display:grid; place-items:center; width:23px; height:23px; border-radius:50%; color:#226f4f; background:#fff; font-size:18px; line-height:1; transform:rotate(90deg); }
+#cbw-root .cbw-fab.cbw-original-active { color:#292c28; background:#fff; border-color:#cfd3cc; box-shadow:0 8px 26px #1015102b; }
+#cbw-root .cbw-fab.cbw-original-active:hover { background:#f5f6f3; }
+#cbw-root .cbw-fab.cbw-original-active .cbw-fab-icon { color:#fff; background:#237a55; }
+@media (max-width:700px) { #cbw-root .cbw-app { grid-template-columns:190px minmax(0,1fr); } #cbw-root .cbw-sidebar { padding:14px 9px; } #cbw-root .cbw-topbar { padding:15px 18px; height:78px; } #cbw-root .cbw-messages { padding:24px 18px 36px; } #cbw-root .cbw-composer { width:calc(100% - 28px); margin-bottom:14px; } }
+@media (max-width:700px) { #cbw-root .cbw-fab { right:14px; bottom:14px; min-width:44px; height:44px; padding:0 11px; } #cbw-root .cbw-fab-label { display:none; } }
