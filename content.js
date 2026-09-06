@@ -222,20 +222,46 @@
         branchButton.lastElementChild.textContent = branch.name;
         treeEl.appendChild(branchButton);
 
-        branchNodes(branch.id).forEach((node, nodeIndex) => {
-          const row = document.createElement("div");
-          row.className = `cbw-node-row${node.id === state.activeNodeId ? " active" : ""}`;
-          row.style.setProperty("--depth", depth + 1);
-          row.dataset.nodeId = node.id;
-          row.innerHTML = `<button type="button" class="cbw-node"><span class="cbw-node-path">${nodeIndex === branchNodes(branch.id).length - 1 ? "└─" : "├─"}</span><i></i><span class="cbw-node-name"></span><em></em></button><button type="button" class="cbw-node-rename" title="重命名节点" aria-label="重命名节点">✎</button>`;
-          row.querySelector(".cbw-node-name").textContent = node.title;
-          row.querySelector("em").textContent = node.status === "waiting" ? "…" : "✓";
-          treeEl.appendChild(row);
-        });
+        const appendNodes = (nodeParentId, nodeDepth) => {
+          const children = branchNodes(branch.id).filter((node) => node.parentNodeId === nodeParentId);
+          children.forEach((node, nodeIndex) => {
+            const row = document.createElement("div");
+            row.className = `cbw-node-row${node.id === state.activeNodeId ? " active" : ""}`;
+            row.style.setProperty("--depth", depth + nodeDepth + 1);
+            row.dataset.nodeId = node.id;
+            row.draggable = !archiveViewScopeKey;
+            row.innerHTML = `<button type="button" class="cbw-node"><span class="cbw-node-path">${nodeIndex === children.length - 1 ? "└─" : "├─"}</span><i></i><span class="cbw-node-name"></span><em></em></button><button type="button" class="cbw-node-rename" title="重命名节点" aria-label="重命名节点">✎</button>`;
+            row.querySelector(".cbw-node-name").textContent = node.title;
+            row.querySelector("em").textContent = node.status === "waiting" ? "…" : "✓";
+            treeEl.appendChild(row);
+            appendNodes(node.id, nodeDepth + 1);
+          });
+        };
+        appendNodes(null, 0);
         appendBranches(branch.id, depth + 1);
       });
     };
     appendBranches(null, 0);
+  }
+
+  function nodePath(nodeId) {
+    const path = [];
+    const seen = new Set();
+    let node = state.nodes.find((item) => item.id === nodeId);
+    while (node && !seen.has(node.id)) {
+      path.unshift(node);
+      seen.add(node.id);
+      node = node.parentNodeId ? state.nodes.find((item) => item.id === node.parentNodeId) : null;
+    }
+    return path;
+  }
+
+  function visibleNodePath() {
+    const nodes = branchNodes(state.activeBranchId);
+    if (!nodes.length) return [];
+    const selected = nodes.find((node) => node.id === state.activeNodeId) || nodes.at(-1);
+    if (!state.activeNodeId) state.activeNodeId = selected.id;
+    return nodePath(selected.id).filter((node) => node.branchId === state.activeBranchId);
   }
 
   function renderMessage(message, node) {
@@ -262,7 +288,7 @@
 
   function renderMessages() {
     messagesEl.replaceChildren();
-    const nodes = branchNodes(state.activeBranchId);
+    const nodes = visibleNodePath();
     if (!nodes.length) {
       const empty = document.createElement("div");
       empty.className = "cbw-empty";
@@ -483,6 +509,34 @@
     render();
   }
 
+  function isNodeDescendant(candidateId, ancestorId) {
+    const seen = new Set();
+    let node = state.nodes.find((item) => item.id === candidateId);
+    while (node?.parentNodeId && !seen.has(node.id)) {
+      if (node.parentNodeId === ancestorId) return true;
+      seen.add(node.id);
+      node = state.nodes.find((item) => item.id === node.parentNodeId);
+    }
+    return false;
+  }
+
+  function canMoveNode(sourceId, targetId) {
+    const source = state.nodes.find((node) => node.id === sourceId);
+    const target = state.nodes.find((node) => node.id === targetId);
+    return Boolean(source && target && source.id !== target.id && source.branchId === target.branchId && !isNodeDescendant(target.id, source.id));
+  }
+
+  function moveNodeSubtree(sourceId, targetId) {
+    if (!canMoveNode(sourceId, targetId)) return false;
+    const source = state.nodes.find((node) => node.id === sourceId);
+    source.parentNodeId = targetId;
+    state.activeBranchId = source.branchId;
+    state.activeNodeId = source.id;
+    statusEl.textContent = `已将“${source.title}”及其子树移动到新父节点下`;
+    render();
+    return true;
+  }
+
   treeEl.addEventListener("click", (event) => {
     const renameButton = event.target.closest(".cbw-node-rename");
     const nodeRow = event.target.closest(".cbw-node-row");
@@ -502,7 +556,7 @@
       const branch = state.branches.find((item) => item.id === branchButton.dataset.branchId);
       if (!branch) return;
       state.activeBranchId = branch.id;
-      state.activeNodeId = null;
+      state.activeNodeId = branchNodes(branch.id).at(-1)?.id || null;
       render();
       const context = projectContext(currentPageKey);
       if (context && !archiveViewScopeKey) {
@@ -510,6 +564,33 @@
         if (targetPath !== currentPageKey) location.assign(targetPath);
       }
     }
+  });
+
+  treeEl.addEventListener("dragstart", (event) => {
+    const row = event.target.closest(".cbw-node-row");
+    if (!row || archiveViewScopeKey) { event.preventDefault(); return; }
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", row.dataset.nodeId);
+    row.classList.add("dragging");
+  });
+  treeEl.addEventListener("dragover", (event) => {
+    const targetRow = event.target.closest(".cbw-node-row");
+    const sourceId = event.dataTransfer.getData("text/plain") || treeEl.querySelector(".cbw-node-row.dragging")?.dataset.nodeId;
+    treeEl.querySelectorAll(".cbw-node-row.drop-target").forEach((row) => row.classList.remove("drop-target"));
+    if (!targetRow || !canMoveNode(sourceId, targetRow.dataset.nodeId)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    targetRow.classList.add("drop-target");
+  });
+  treeEl.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const targetRow = event.target.closest(".cbw-node-row");
+    const sourceId = event.dataTransfer.getData("text/plain") || treeEl.querySelector(".cbw-node-row.dragging")?.dataset.nodeId;
+    if (targetRow) moveNodeSubtree(sourceId, targetRow.dataset.nodeId);
+    treeEl.querySelectorAll(".cbw-node-row.dragging,.cbw-node-row.drop-target").forEach((row) => row.classList.remove("dragging", "drop-target"));
+  });
+  treeEl.addEventListener("dragend", () => {
+    treeEl.querySelectorAll(".cbw-node-row.dragging,.cbw-node-row.drop-target").forEach((row) => row.classList.remove("dragging", "drop-target"));
   });
 
   recordsEl.addEventListener("click", (event) => {
@@ -548,7 +629,9 @@
     const branchId = state.activeBranchId;
     const userMessage = { id: uid("msg"), branchId, role: "user", content, createdAt: now() };
     const node = {
-      id: uid("node"), branchId, parentNodeId: branchNodes(branchId).at(-1)?.id || null,
+      id: uid("node"), branchId,
+      parentNodeId: state.nodes.some((item) => item.id === state.activeNodeId && item.branchId === branchId)
+        ? state.activeNodeId : (branchNodes(branchId).at(-1)?.id || null),
       title: makeTurnTitle(content), status: "waiting", userMessageId: userMessage.id,
       assistantMessageId: null, createdAt: now()
     };
