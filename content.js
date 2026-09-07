@@ -496,6 +496,39 @@
     return candidates.sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0] || document.scrollingElement;
   }
 
+  function observeHistoryTurns(turns) {
+    if (!historyImport || !turns.length) return;
+    const observedIds = [...new Set(turns.map((turn) => turn.id))];
+    turns.forEach((turn) => {
+      if (!historyImport.collected.has(turn.id)) historyImport.collected.set(turn.id, { ...turn, seenOrder: 0 });
+    });
+    if (!historyImport.order.length) {
+      historyImport.order = observedIds;
+    } else {
+      const firstOverlapIndex = observedIds.findIndex((id) => historyImport.order.includes(id));
+      if (firstOverlapIndex === -1) {
+        historyImport.order = [...observedIds.filter((id) => !historyImport.order.includes(id)), ...historyImport.order];
+      } else {
+        const anchorId = observedIds[firstOverlapIndex];
+        const anchorIndex = historyImport.order.indexOf(anchorId);
+        const prefix = observedIds.slice(0, firstOverlapIndex).filter((id) => !historyImport.order.includes(id));
+        historyImport.order.splice(anchorIndex, 0, ...prefix);
+        let previousId = anchorId;
+        observedIds.slice(firstOverlapIndex + 1).forEach((id) => {
+          if (!historyImport.order.includes(id)) {
+            const previousIndex = historyImport.order.indexOf(previousId);
+            historyImport.order.splice(previousIndex + 1, 0, id);
+          }
+          previousId = id;
+        });
+      }
+    }
+    historyImport.order.forEach((id, index) => {
+      const turn = historyImport.collected.get(id);
+      if (turn) turn.seenOrder = index;
+    });
+  }
+
   function waitForDomChange(target, timeout = 900) {
     return new Promise((resolve) => {
       let finished = false;
@@ -520,6 +553,7 @@
     const branchId = state.activeBranchId;
     let parentId = null;
     let added = 0;
+    const orderedNodeIds = [];
     pairs.forEach(({ user, assistant }) => {
       let node = state.nodes.find((item) => item.sourceUserTurnId === user.id);
       if (!node) {
@@ -535,8 +569,6 @@
         state.messages.push(userMessage);
         state.nodes.push(node);
         added += 1;
-      } else if (parentId && !node.parentNodeId) {
-        node.parentNodeId = parentId;
       }
       if (assistant && !node.assistantMessageId) {
         const assistantMessage = { id: uid("msg"), nodeId: node.id, branchId, role: "assistant", content: assistant.content, sourceTurnId: assistant.id, createdAt: now() };
@@ -545,7 +577,12 @@
         node.status = "complete";
       }
       node.sourceUserTurnId ||= user.id;
+      if (!orderedNodeIds.includes(node.id)) orderedNodeIds.push(node.id);
       parentId = node.id;
+    });
+    orderedNodeIds.forEach((nodeId, index) => {
+      const node = state.nodes.find((item) => item.id === nodeId);
+      if (node) node.parentNodeId = index === 0 ? null : orderedNodeIds[index - 1];
     });
     if (parentId) state.activeNodeId = parentId;
     return added;
@@ -570,7 +607,7 @@
       statusEl.textContent = "未找到原网页的对话滚动区域。";
       return;
     }
-    historyImport = { cancelled: false, collected: new Map(), seenSequence: 0 };
+    historyImport = { cancelled: false, collected: new Map(), order: [] };
     const pageAtStart = currentPath();
     const originalScrollTop = container.scrollTop;
     const startedAt = Date.now();
@@ -589,10 +626,7 @@
           statusEl.textContent = "页面地址已变化，历史检查已停止。";
           break;
         }
-        conversationTurns().forEach((turn) => {
-          const existing = historyImport.collected.get(turn.id);
-          historyImport.collected.set(turn.id, existing || { ...turn, seenOrder: historyImport.seenSequence++ });
-        });
+        observeHistoryTurns(conversationTurns());
         const size = historyImport.collected.size;
         unchangedRounds = size === previousSize ? unchangedRounds + 1 : 0;
         previousSize = size;
@@ -602,10 +636,7 @@
         container.scrollTo({ top: Math.max(0, container.scrollTop - distance), behavior: "auto" });
         await waitForDomChange(container);
       }
-      conversationTurns().forEach((turn) => {
-        const existing = historyImport.collected.get(turn.id);
-        historyImport.collected.set(turn.id, existing || { ...turn, seenOrder: historyImport.seenSequence++ });
-      });
+      observeHistoryTurns(conversationTurns());
       if (!historyImport.cancelled) {
         const collected = [...historyImport.collected.values()];
         const added = mergeImportedTurns(collected);

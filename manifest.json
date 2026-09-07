@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Chat Branch Workspace",
   "description": "A local, branch-based Markdown chat workspace for ChatGPT pages in Chrome and Edge.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "content_scripts": [
     {
       "matches": ["https://chatgpt.com/*"],
