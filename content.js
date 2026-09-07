@@ -30,6 +30,7 @@
   let routeCandidate = currentPageKey;
   let routeCandidateSince = Date.now();
   let archiveViewScopeKey = null;
+  let historyImport = null;
 
   function initialState() {
     const rootId = uid("branch");
@@ -74,7 +75,7 @@
       <main class="cbw-main">
         <header class="cbw-topbar">
           <div><span class="cbw-kicker">CURRENT BRANCH</span><h1 class="cbw-title"></h1></div>
-          <div class="cbw-top-actions"><button class="cbw-return-page" type="button" hidden>返回当前网页</button><button class="cbw-rename" type="button">重命名 branch</button></div>
+          <div class="cbw-top-actions"><button class="cbw-history-scan" type="button">检查历史对话</button><button class="cbw-return-page" type="button" hidden>返回当前网页</button><button class="cbw-rename" type="button">重命名 branch</button></div>
         </header>
         <section class="cbw-messages" aria-live="polite"></section>
         <form class="cbw-composer">
@@ -102,6 +103,7 @@
   const recordsEl = $(".cbw-records");
   const recordCountEl = $(".cbw-record-count");
   const returnPageEl = $(".cbw-return-page");
+  const historyScanEl = $(".cbw-history-scan");
 
   function loadRecords() {
     try { return JSON.parse(localStorage.getItem(RECORDS_KEY)) || []; }
@@ -411,6 +413,217 @@
     return (content.innerText || content.textContent || "").trim();
   }
 
+  function textOfChildren(element, context = {}) {
+    return [...element.childNodes].map((node) => domNodeToMarkdown(node, context)).join("");
+  }
+
+  function domNodeToMarkdown(node, context = {}) {
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || "";
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+    const element = node;
+    const tag = element.tagName.toLowerCase();
+    if (["button", "svg", "style", "script"].includes(tag)) return "";
+    if (tag === "br") return "\n";
+    if (tag === "pre") {
+      const code = element.querySelector("code")?.textContent || element.textContent || "";
+      const language = element.querySelector("code")?.className.match(/language-([\w-]+)/)?.[1] || "";
+      return `\n\n\`\`\`${language}\n${code.replace(/\n$/, "")}\n\`\`\`\n\n`;
+    }
+    if (tag === "code") return `\`${element.textContent || ""}\``;
+    if (/^h[1-6]$/.test(tag)) return `\n\n${"#".repeat(Number(tag[1]))} ${textOfChildren(element, context).trim()}\n\n`;
+    if (tag === "p") return `\n\n${textOfChildren(element, context).trim()}\n\n`;
+    if (tag === "strong" || tag === "b") return `**${textOfChildren(element, context)}**`;
+    if (tag === "em" || tag === "i") return `*${textOfChildren(element, context)}*`;
+    if (tag === "a") return `[${textOfChildren(element, context).trim() || element.href}](${element.href})`;
+    if (tag === "blockquote") return `\n${textOfChildren(element, context).trim().split("\n").map((line) => `> ${line}`).join("\n")}\n`;
+    if (tag === "ul" || tag === "ol") return `\n${textOfChildren(element, { ...context, list: tag }).trim()}\n`;
+    if (tag === "li") {
+      const marker = context.list === "ol" ? "1. " : "- ";
+      return `${marker}${textOfChildren(element, context).trim()}\n`;
+    }
+    if (tag === "hr") return "\n\n---\n\n";
+    return textOfChildren(element, context);
+  }
+
+  function normalizeMarkdown(content) {
+    return content.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  function extractTurnMarkdown(roleElement) {
+    const content = roleElement.querySelector(".markdown, [class*='markdown'], [data-message-content]") || roleElement;
+    return normalizeMarkdown(textOfChildren(content));
+  }
+
+  function conversationTurns() {
+    const turnSelectors = ["[data-testid^='conversation-turn-']", "article[data-turn]"];
+    const seen = new Set();
+    const turns = [];
+    turnSelectors.forEach((selector) => document.querySelectorAll(selector).forEach((turn) => {
+      if (host.contains(turn) || seen.has(turn)) return;
+      const roleElement = turn.matches("[data-message-author-role]")
+        ? turn : (turn.querySelector("[data-message-author-role]") || (turn.hasAttribute("data-turn") ? turn : null));
+      const role = roleElement?.getAttribute("data-message-author-role") || turn.getAttribute("data-turn");
+      if (!roleElement || !["user", "assistant"].includes(role)) return;
+      const content = extractTurnMarkdown(roleElement);
+      if (!content) return;
+      seen.add(turn);
+      const testId = turn.getAttribute("data-testid") || "";
+      const numericOrder = Number(testId.match(/(\d+)(?!.*\d)/)?.[1]);
+      turns.push({ id: testId || `${role}:${hashText(content)}`, role, content, order: Number.isFinite(numericOrder) ? numericOrder : null });
+    }));
+    return turns;
+  }
+
+  function hashText(text) {
+    let hash = 2166136261;
+    for (let index = 0; index < text.length; index += 1) {
+      hash ^= text.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  function findConversationScrollContainer() {
+    const firstTurn = document.querySelector("[data-testid^='conversation-turn-'], article[data-turn]");
+    let element = firstTurn?.parentElement;
+    while (element && element !== document.body) {
+      const style = getComputedStyle(element);
+      if (!host.contains(element) && /(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 80) return element;
+      element = element.parentElement;
+    }
+    const candidates = [...document.querySelectorAll("main, [role='main'], [class*='overflow-y-auto']")]
+      .filter((candidate) => !host.contains(candidate) && candidate.scrollHeight > candidate.clientHeight + 80);
+    return candidates.sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0] || document.scrollingElement;
+  }
+
+  function waitForDomChange(target, timeout = 900) {
+    return new Promise((resolve) => {
+      let finished = false;
+      const done = () => { if (finished) return; finished = true; observer.disconnect(); clearTimeout(timer); resolve(); };
+      const observer = new MutationObserver(done);
+      observer.observe(target === document.scrollingElement ? document.body : target, { childList: true, subtree: true, characterData: true });
+      const timer = setTimeout(done, timeout);
+    });
+  }
+
+  function mergeImportedTurns(turns) {
+    const ordered = [...turns].sort((a, b) => {
+      if (a.order !== null && b.order !== null) return a.order - b.order;
+      return a.seenOrder - b.seenOrder;
+    });
+    const pairs = [];
+    for (let index = 0; index < ordered.length; index += 1) {
+      if (ordered[index].role !== "user") continue;
+      const assistant = ordered[index + 1]?.role === "assistant" ? ordered[index + 1] : null;
+      pairs.push({ user: ordered[index], assistant });
+    }
+    const branchId = state.activeBranchId;
+    let parentId = null;
+    let added = 0;
+    pairs.forEach(({ user, assistant }) => {
+      let node = state.nodes.find((item) => item.sourceUserTurnId === user.id);
+      if (!node) {
+        node = branchNodes(branchId).find((item) => normalizeMarkdown(messageById(item.userMessageId)?.content || "") === user.content);
+      }
+      if (!node) {
+        const userMessage = { id: uid("msg"), branchId, role: "user", content: user.content, sourceTurnId: user.id, createdAt: now() };
+        node = {
+          id: uid("node"), branchId, parentNodeId: parentId, title: makeTurnTitle(user.content),
+          status: assistant ? "complete" : "waiting", userMessageId: userMessage.id,
+          assistantMessageId: null, sourceUserTurnId: user.id, imported: true, createdAt: now()
+        };
+        state.messages.push(userMessage);
+        state.nodes.push(node);
+        added += 1;
+      } else if (parentId && !node.parentNodeId) {
+        node.parentNodeId = parentId;
+      }
+      if (assistant && !node.assistantMessageId) {
+        const assistantMessage = { id: uid("msg"), nodeId: node.id, branchId, role: "assistant", content: assistant.content, sourceTurnId: assistant.id, createdAt: now() };
+        state.messages.push(assistantMessage);
+        node.assistantMessageId = assistantMessage.id;
+        node.status = "complete";
+      }
+      node.sourceUserTurnId ||= user.id;
+      parentId = node.id;
+    });
+    if (parentId) state.activeNodeId = parentId;
+    return added;
+  }
+
+  async function scanHistoricalConversation() {
+    if (historyImport) {
+      historyImport.cancelled = true;
+      historyScanEl.textContent = "正在停止…";
+      return;
+    }
+    if (archiveViewScopeKey) {
+      statusEl.textContent = "请先返回当前网页，再检查历史对话。";
+      return;
+    }
+    if (pendingCapture) {
+      statusEl.textContent = "当前回复仍在生成，请等待同步完成后再检查历史。";
+      return;
+    }
+    const container = findConversationScrollContainer();
+    if (!container) {
+      statusEl.textContent = "未找到原网页的对话滚动区域。";
+      return;
+    }
+    historyImport = { cancelled: false, collected: new Map(), seenSequence: 0 };
+    const pageAtStart = currentPath();
+    const originalScrollTop = container.scrollTop;
+    const startedAt = Date.now();
+    let unchangedRounds = 0;
+    let previousSize = 0;
+    historyScanEl.textContent = "停止检查";
+    historyScanEl.classList.add("active");
+    inputEl.disabled = true;
+    $(".cbw-composer button[type='submit']").disabled = true;
+    statusEl.textContent = "正在检查历史对话…";
+    try {
+      for (let round = 0; round < 80 && Date.now() - startedAt < 60000; round += 1) {
+        if (historyImport.cancelled) break;
+        if (currentPath() !== pageAtStart) {
+          historyImport.cancelled = true;
+          statusEl.textContent = "页面地址已变化，历史检查已停止。";
+          break;
+        }
+        conversationTurns().forEach((turn) => {
+          const existing = historyImport.collected.get(turn.id);
+          historyImport.collected.set(turn.id, existing || { ...turn, seenOrder: historyImport.seenSequence++ });
+        });
+        const size = historyImport.collected.size;
+        unchangedRounds = size === previousSize ? unchangedRounds + 1 : 0;
+        previousSize = size;
+        statusEl.textContent = `正在检查历史对话：已采集 ${size} 条消息`;
+        if (container.scrollTop <= 1 && unchangedRounds >= 3) break;
+        const distance = Math.max(container.clientHeight * 0.85, 520);
+        container.scrollTo({ top: Math.max(0, container.scrollTop - distance), behavior: "auto" });
+        await waitForDomChange(container);
+      }
+      conversationTurns().forEach((turn) => {
+        const existing = historyImport.collected.get(turn.id);
+        historyImport.collected.set(turn.id, existing || { ...turn, seenOrder: historyImport.seenSequence++ });
+      });
+      if (!historyImport.cancelled) {
+        const collected = [...historyImport.collected.values()];
+        const added = mergeImportedTurns(collected);
+        statusEl.textContent = `历史检查完成：采集 ${collected.length} 条消息，新增 ${added} 个节点`;
+        render();
+      } else {
+        statusEl.textContent = `历史检查已停止，已采集 ${historyImport.collected.size} 条消息（未写入）`;
+      }
+    } finally {
+      container.scrollTo({ top: originalScrollTop, behavior: "auto" });
+      historyImport = null;
+      historyScanEl.textContent = "检查历史对话";
+      historyScanEl.classList.remove("active");
+      inputEl.disabled = Boolean(archiveViewScopeKey);
+      $(".cbw-composer button[type='submit']").disabled = Boolean(archiveViewScopeKey);
+    }
+  }
+
   function isGenerating() {
     return Boolean(document.querySelector("button[data-testid='stop-button'], button[aria-label*='Stop'], button[aria-label*='停止']"));
   }
@@ -612,6 +825,7 @@
     if (name) { branch.name = name; render(); }
   });
   returnPageEl.addEventListener("click", returnToCurrentPage);
+  historyScanEl.addEventListener("click", scanHistoricalConversation);
   $(".cbw-exit").addEventListener("click", () => setViewMode("original"));
   fabEl.addEventListener("click", () => setViewMode(appEl.classList.contains("cbw-app-hidden") ? "workspace" : "original"));
 
