@@ -266,6 +266,79 @@
     return nodePath(selected.id).filter((node) => node.branchId === state.activeBranchId);
   }
 
+  function splitMarkdownSections(content) {
+    const lines = content.replace(/\r\n?/g, "\n").split("\n");
+    const sections = [];
+    let index = 0;
+    while (index < lines.length) {
+      if (!lines[index].trim()) { index += 1; continue; }
+      const start = index;
+      const fence = lines[index].match(/^\s*(```+|~~~+)/);
+      let type = "content";
+      if (fence) {
+        type = "code";
+        index += 1;
+        while (index < lines.length && !new RegExp(`^\\s*${fence[1][0]}{${fence[1].length},}`).test(lines[index])) index += 1;
+        if (index < lines.length) index += 1;
+      } else {
+        if (/^\s{0,3}#{1,6}\s+/.test(lines[index])) type = "heading";
+        index += 1;
+        while (index < lines.length && !/^\s*(```+|~~~+)/.test(lines[index]) && !/^\s{0,3}#{1,6}\s+/.test(lines[index])) index += 1;
+      }
+      const raw = lines.slice(start, index).join("\n").trim();
+      if (raw) sections.push({ raw, type, lineCount: Math.max(1, index - start) });
+    }
+    return sections.length ? sections : [{ raw: content, type: "content", lineCount: Math.max(1, lines.length) }];
+  }
+
+  function sectionPreview(section) {
+    const lines = section.raw.split("\n");
+    let first = lines[0]?.trim() || "";
+    if (section.type === "code" && /^\s*(```+|~~~+)/.test(first)) first = lines.slice(1).find((line) => line.trim())?.trim() || first;
+    return first.replace(/^\s{0,3}#{1,6}\s+/, "").replace(/^[-*>]\s+/, "").trim() || "空内容";
+  }
+
+  function renderStructuredMarkdown(body, message) {
+    message.sectionFolds ||= {};
+    splitMarkdownSections(message.content).forEach((section, index) => {
+      const key = `${index}:${hashText(section.raw)}`;
+      const fold = message.sectionFolds[key] || { collapsed: false, note: "" };
+      message.sectionFolds[key] = fold;
+      const sectionEl = document.createElement("section");
+      sectionEl.className = `cbw-md-section cbw-section-${section.type}${fold.collapsed ? " collapsed" : ""}`;
+      sectionEl.dataset.sectionKey = key;
+      sectionEl.style.setProperty("--line-count", String(section.lineCount));
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `cbw-section-toggle${fold.note.trim() ? " annotated" : ""}`;
+      button.textContent = fold.collapsed ? "v" : "^";
+      button.title = `${fold.collapsed ? "展开" : "折叠"}此段 · ${section.lineCount} 行`;
+      button.setAttribute("aria-label", button.title);
+      button.setAttribute("aria-expanded", String(!fold.collapsed));
+
+      const expanded = document.createElement("div");
+      expanded.className = "cbw-section-body";
+      expanded.innerHTML = md.render(section.raw);
+      expanded.querySelectorAll("a").forEach((link) => { link.target = "_blank"; link.rel = "noopener noreferrer"; });
+
+      const collapsed = document.createElement("div");
+      collapsed.className = "cbw-section-collapsed";
+      const preview = document.createElement("div");
+      preview.className = "cbw-section-preview";
+      preview.textContent = sectionPreview(section);
+      const note = document.createElement("textarea");
+      note.className = "cbw-section-note";
+      note.rows = 1;
+      note.placeholder = "添加注释…";
+      note.value = fold.note;
+      note.setAttribute("aria-label", "此折叠段的注释");
+      collapsed.append(preview, note);
+      sectionEl.append(button, expanded, collapsed);
+      body.appendChild(sectionEl);
+    });
+  }
+
   function renderMessage(message, node) {
     const article = document.createElement("article");
     article.className = `cbw-message cbw-${message.role}`;
@@ -283,8 +356,7 @@
     }
     const body = document.createElement("div");
     body.className = "cbw-markdown";
-    body.innerHTML = md.render(message.content);
-    body.querySelectorAll("a").forEach((link) => { link.target = "_blank"; link.rel = "noopener noreferrer"; });
+    renderStructuredMarkdown(body, message);
     const shell = document.createElement("div");
     shell.className = `cbw-content-shell${message.collapsed ? " collapsed" : ""}`;
     const collapseButton = document.createElement("button");
@@ -861,6 +933,23 @@
   });
 
   messagesEl.addEventListener("click", (event) => {
+    const sectionToggle = event.target.closest(".cbw-section-toggle");
+    if (sectionToggle) {
+      const article = sectionToggle.closest(".cbw-message");
+      const section = sectionToggle.closest(".cbw-md-section");
+      const message = article && messageById(article.dataset.messageId);
+      const fold = message?.sectionFolds?.[section?.dataset.sectionKey];
+      if (!message || !section || !fold) return;
+      fold.collapsed = !fold.collapsed;
+      section.classList.toggle("collapsed", fold.collapsed);
+      sectionToggle.textContent = fold.collapsed ? "v" : "^";
+      sectionToggle.title = `${fold.collapsed ? "展开" : "折叠"}此段 · ${section.style.getPropertyValue("--line-count")} 行`;
+      sectionToggle.setAttribute("aria-label", sectionToggle.title);
+      sectionToggle.setAttribute("aria-expanded", String(!fold.collapsed));
+      save();
+      if (fold.collapsed) section.querySelector(".cbw-section-note")?.focus();
+      return;
+    }
     const toggle = event.target.closest(".cbw-collapse-toggle");
     if (!toggle) return;
     const article = toggle.closest(".cbw-message");
@@ -873,6 +962,21 @@
     toggle.title = message.collapsed ? "展开内容" : "折叠内容";
     toggle.setAttribute("aria-label", toggle.title);
     toggle.setAttribute("aria-expanded", String(!message.collapsed));
+    save();
+  });
+
+  messagesEl.addEventListener("input", (event) => {
+    const note = event.target.closest(".cbw-section-note");
+    if (!note) return;
+    const article = note.closest(".cbw-message");
+    const section = note.closest(".cbw-md-section");
+    const message = article && messageById(article.dataset.messageId);
+    const fold = message?.sectionFolds?.[section?.dataset.sectionKey];
+    if (!fold) return;
+    fold.note = note.value;
+    section.querySelector(".cbw-section-toggle")?.classList.toggle("annotated", Boolean(fold.note.trim()));
+    note.style.height = "auto";
+    note.style.height = `${Math.min(note.scrollHeight, 120)}px`;
     save();
   });
 
