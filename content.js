@@ -270,6 +270,7 @@
     const article = document.createElement("article");
     article.className = `cbw-message cbw-${message.role}`;
     article.dataset.nodeId = node?.id || "";
+    article.dataset.messageId = message.id;
     const meta = document.createElement("div");
     meta.className = "cbw-message-meta";
     meta.textContent = message.role === "user" ? "YOU" : "ASSISTANT";
@@ -284,7 +285,17 @@
     body.className = "cbw-markdown";
     body.innerHTML = md.render(message.content);
     body.querySelectorAll("a").forEach((link) => { link.target = "_blank"; link.rel = "noopener noreferrer"; });
-    article.appendChild(body);
+    const shell = document.createElement("div");
+    shell.className = `cbw-content-shell${message.collapsed ? " collapsed" : ""}`;
+    const collapseButton = document.createElement("button");
+    collapseButton.type = "button";
+    collapseButton.className = "cbw-collapse-toggle";
+    collapseButton.textContent = message.collapsed ? "v" : "^";
+    collapseButton.title = message.collapsed ? "展开内容" : "折叠内容";
+    collapseButton.setAttribute("aria-label", collapseButton.title);
+    collapseButton.setAttribute("aria-expanded", String(!message.collapsed));
+    shell.append(collapseButton, body);
+    article.appendChild(shell);
     messagesEl.appendChild(article);
   }
 
@@ -847,6 +858,22 @@
       return;
     }
     openLocalRecord(row.dataset.scopeKey);
+  });
+
+  messagesEl.addEventListener("click", (event) => {
+    const toggle = event.target.closest(".cbw-collapse-toggle");
+    if (!toggle) return;
+    const article = toggle.closest(".cbw-message");
+    const message = article && messageById(article.dataset.messageId);
+    if (!message) return;
+    message.collapsed = !message.collapsed;
+    const shell = toggle.closest(".cbw-content-shell");
+    shell.classList.toggle("collapsed", message.collapsed);
+    toggle.textContent = message.collapsed ? "v" : "^";
+    toggle.title = message.collapsed ? "展开内容" : "折叠内容";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.setAttribute("aria-expanded", String(!message.collapsed));
+    save();
   });
 
   $(".cbw-new").addEventListener("click", addBranch);
