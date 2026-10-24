@@ -1,13 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Chat Branch Workspace",
-  "description": "A local, branch-based Markdown chat workspace for ChatGPT pages in Chrome and Edge.",
-  "version": "1.0.0",
+  "description": "Native ChatGPT enhancements with a local conversation graph, path filtering, and collapsible Markdown sections.",
+  "version": "2.0.2",
   "content_scripts": [
     {
       "matches": ["https://chatgpt.com/*"],
-      "js": ["vendor/markdown-it.min.js", "content.js"],
-      "css": ["style.css"],
+      "js": [
+        "vendor/markdown-it.min.js",
+        "content.js",
+        "src/storage.js",
+        "src/chatgpt-adapter.js",
+        "src/focus-model.js",
+        "src/focus-panel.js",
+        "src/folding.js",
+        "src/native-app.js"
+      ],
+      "css": ["style.css", "native.css"],
       "run_at": "document_idle"
     }
   ]

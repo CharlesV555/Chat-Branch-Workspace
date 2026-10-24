@@ -180,11 +180,13 @@
     const workspace = mode !== "original";
     appEl.classList.toggle("cbw-app-hidden", !workspace);
     fabEl.classList.toggle("cbw-original-active", !workspace);
-    fabEl.querySelector(".cbw-fab-label").textContent = workspace ? "原界面" : "分支界面";
-    const label = workspace ? "切换到 ChatGPT 原界面" : "切换到分支工作台";
+    fabEl.querySelector(".cbw-fab-label").textContent = workspace ? "原生增强" : "实验工作台";
+    const label = workspace ? "切换到 ChatGPT 原生增强界面" : "切换到实验工作台";
     fabEl.setAttribute("aria-label", label);
     fabEl.title = label;
     localStorage.setItem(VIEW_MODE_KEY, workspace ? "workspace" : "original");
+    document.documentElement.dataset.cbwViewMode = workspace ? "workspace" : "native";
+    window.dispatchEvent(new CustomEvent("cbw:view-mode", { detail: { mode: workspace ? "workspace" : "native" } }));
   }
 
   function renderRecords() {
@@ -1050,5 +1052,5 @@
   const resumableNode = branchNodes(state.activeBranchId).findLast((node) => node.status === "waiting" && !node.assistantMessageId);
   if (resumableNode) beginCapture(resumableNode.id, true);
   render();
-  setViewMode(localStorage.getItem(VIEW_MODE_KEY) === "original" ? "original" : "workspace");
+  setViewMode(localStorage.getItem(VIEW_MODE_KEY) === "workspace" ? "workspace" : "original");
 })();
